@@ -37,36 +37,38 @@
 
 '''
 
+import traceback
 import openpyxl
-from datetime import datetime
+import datetime
 from docxtpl import DocxTemplate
 from pyautogui import alert
 import os
+
+import requests
 
 TEMPLATES_FOLDER_PATH = "Шаблоны/"
 OFP = ""
 INPUT_FILE_PATH = "INPUT.xlsx"
 INPUT_FILE_PAGE_NAME = "Основные переменные"
-obj_nameanius = "БС"
 
 TEMPLATES = [
     { 
         "TEMPLATE" : TEMPLATES_FOLDER_PATH+"1 Журнал авторского надзора.docx",
-        "FILE_NAME" :     "1Журнал авторского надзора"
+        "FILE_NAME" :     "Журнал авторского надзора"
     },{ 
         "TEMPLATE" : TEMPLATES_FOLDER_PATH+"2 Журнал сварочных работ.docx",
-        "FILE_NAME" :     "2Журнал сварочных работ"
+        "FILE_NAME" :     "Журнал сварочных работ"
     },
     { 
-        "TEMPLATE" : TEMPLATES_FOLDER_PATH+"3 Акт скрытых работ.docx",
-        "FILE_NAME" :     "3Акт скрытых работ"
+        "TEMPLATE" : TEMPLATES_FOLDER_PATH+"Акт скрытых работ/3 Акт скрытых работ.docx",
+        "FILE_NAME" :     "Акт скрытых работ"
     },
     { 
         "TEMPLATE" : TEMPLATES_FOLDER_PATH+"4 Журнал работ по МСК.docx",
-        "FILE_NAME" : "4Журнал работ по МСК"
+        "FILE_NAME" : "Журнал работ по МСК"
     },{ 
         "TEMPLATE" : TEMPLATES_FOLDER_PATH+"5 Журнал производства работ.docx",
-        "FILE_NAME" : "5Журнал производства работ"
+        "FILE_NAME" : "Журнал производства работ"
     }
 ]
 
@@ -80,7 +82,37 @@ OUTPUT_FILE_NAMES = [
 
 
 def none_to_empty_string(dictionary):
-    return {key: value if value is not None else "" for key, value in dictionary.items()}
+    months = {
+         1 : "январь",
+         2 : "феврать",
+         3 : "март",
+         4 : "апрель",
+         5 : "май",
+         6 : "июнь",
+         7 : "июль",
+         8 : "август",
+         9 : "сентябрь",
+        10 : "октябрь",
+        11 : "ноябрь",
+        12 : "декабрь"
+        
+    }
+    data_dict = {key: value if value is not None else "" for key, value in dictionary.items()}
+    for key, value in data_dict.items():
+        print(f'{key} = {value}')
+        try:
+            data_dict[key] = f'«{value.day if value.day >= 10 else f"0{value.day}"}» {months[value.month]} {value.year}г.'       
+            if "date_and_num_" in str(key) or "tmpl2_tbl1_sdate" in str(key) or  "tmpl2_tbl1_edate" in str(key) or  "tmpl2_tbl3_warkdate" in str(key) or  "asr_one_sdate_q" in str(key) or  "asr_one_edate_q" in str(key) or  "tmpl45_tbl1_sdate_q" in str(key) or  "tmpl45_tbl1_edate_q" in str(key) :  
+                
+                data_dict[key] = f'{value.day if value.day >= 10 else f"0{value.day}"}.{value.month if value.month >= 10 else f"0{value.month}"}.{value.year}'       
+                # print(f'key:{key}, val:{data_dict[key]}')``
+
+            # print(data_dict[key])
+        except:
+            # print("ds")
+            pass
+
+    return data_dict
 
 
 def get_excel_data():
@@ -98,21 +130,42 @@ def get_excel_data():
 
 
         # Удаление лишних строк
-        for i in range(1,16):
-            if data_dict[f'subcontractor_{i}'] == None:
-                data_dict[f'DEFAULT_VALUE_{i}'] = None
-                data_dict[f'CSJ_ORG_{i}'] = None
-                data_dict[f'ne_bilo_{i}'] = None
-                data_dict[f'object_responsible_{i}'] = None
         for i in range(1,31):
-            if data_dict[f'ASR__akt_whalders_{i}'] == None:
-                data_dict[f'aktosrnumb_{i}'] = None
+            try:
+                if  data_dict[f'subcontractor_{i}'] == None: 
+                    data_dict[f'date_and_num_{i}'] = None
+                    data_dict[f'did_not_have_{i}'] = None
+                    data_dict[f'tmpl1_representativ_{i}'] = None
+                    data_dict[f'default_value_{i}'] = None
+                    data_dict[f'company_name_{i}'] = None
+            except:
+                pass     
+
+
+        for i in range(1,31):
+            try:
+                if data_dict[f'ASR__akt_num_{i}'] == None:
+                    data_dict[f'aktosrnumb_{i}'] = None
+                print(f"aktosrnumb_{i} = {data_dict[f'ASR__akt_num_{i}']}")
+            except:
+                pass
+
+        for i in range(1,31):
+            try:
+                if data_dict[f'tmpl45_tbl1_fpos_{i}'] == None:
+                    data_dict[f'tmpl45_tbl1_sdate_q{i}'] = None
+                    data_dict[f'tmpl45_tbl1_edate_q{i}'] = None
+                print(f"tmpl45_tbl1_sdate_q{i} = {data_dict[f'tmpl45_tbl1_edate_q{i}']}")
+            except:
+                pass
+        
 
         # Превратить все None в пустой string ""
         data_dict = none_to_empty_string(data_dict)
         
         # Удалить название словаря None
         del data_dict[None]
+        del data_dict[0]
 
         return data_dict
     # Обработчик ошибок
@@ -124,8 +177,7 @@ def get_excel_data():
 def replace_words_in_docx(dictionary, file_path, file_name, OUTPUT_FOLDER_PATH=OFP):
     try:
     # if True:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        output_file_path = f"{OUTPUT_FOLDER_PATH}{file_name} {dictionary['object_name']} {current_date}.docx"
+        output_file_path = f"{OUTPUT_FOLDER_PATH}{file_name} {dictionary['obj_name']}.docx"
 
         # Берет шаблон, заполняет данными из словаря, сохраняет как новый файл
         print(file_path)
@@ -167,12 +219,9 @@ def merge_docx_files(input_files, output_file):
 
 
 def data_assignments():
-    global obj_nameanius
-    
+
     data = get_excel_data()
-    current_date = datetime.now().strftime('_%d-%m-%Y')
-    obj_nameanius = data['object_name']
-    OUTPUT_FOLDER_PATH = data['object_name']+ f"{current_date}/"
+    OUTPUT_FOLDER_PATH = data['obj_name'] + "/"
         
     try:
         os.mkdir(OUTPUT_FOLDER_PATH)
@@ -180,37 +229,40 @@ def data_assignments():
         pass
     for tmpl in TEMPLATES:
         # alert(tmpl['FILE_NAME'])
-        if tmpl['FILE_NAME'] == "3Акт скрытых работ":
+        if tmpl['FILE_NAME'] == "Акт скрытых работ":
             count = 0 
             for i in range(1,30):
-                param_1 = data['ASR__akt_name_'+str(i)]
-                param_2 = data['ASR__akt_num_'+str(i)]
-                param_3 = data['ASR__akt_deskrop_'+str(i)]
-                param_4 = data['ASR__akt_useditems_'+str(i)]
+                try:
+                    param_1 = data['ASR__akt_name_'+str(i)]
+                    param_2 = data['ASR__akt_num_'+str(i)]
+                    param_3 = data['ASR__akt_deskrop_'+str(i)]
+                    param_4 = data['ASR__akt_useditems_'+str(i)]
 
-                param_5 = data['ASR__akt_startdate_'+str(i)]
-                param_6 = data['ASR__akt_enddate_'+str(i)]
-                param_7 = data['ASR__akt_name_'+str(i+1)]
+                    param_5 = data['asr_one_sdate_'+str(i)]
+                    param_6 = data['asr_one_edate_'+str(i)]
+                    param_7 = data['ASR__akt_name_'+str(i+1)]
 
-                if param_7 == "":
-                    param_7 = "Установка ФБС блоков и ЦМ контейнера"
-                    count = i+1
+                    if param_7 == "":
+                        param_7 = "Установка ФБС блоков и ЦМ контейнера"
+                        count = i+1
 
 
-                XXX = {"param_1":param_1,"param_2":param_2,"param_3":param_3,"param_4":param_4,"param_5":param_5,"param_6":param_6,"param_7":param_7}                   
-                print(XXX)
-                data.update(XXX)
+                    XXX = {"param_1":param_1,"param_2":param_2,"param_3":param_3,"param_4":param_4,"param_5":param_5,"param_6":param_6,"param_7":param_7}                   
+                    print(XXX)
+                    data.update(XXX)
 
-                doc = DocxTemplate(TEMPLATES_FOLDER_PATH+"Акт скрытых работ/3 Акт скрытых работ.docx")
-                doc.render(data)
-                doc.save(TEMPLATES_FOLDER_PATH+f"Акт скрытых работ/file{i}.docx")
-                if param_7 == "Установка ФБС блоков и ЦМ контейнера":
-                    break
+                    doc = DocxTemplate(TEMPLATES_FOLDER_PATH+"Акт скрытых работ/3 Акт скрытых работ.docx")
+                    doc.render(data)
+                    doc.save(TEMPLATES_FOLDER_PATH+f"Акт скрытых работ/file{i}.docx")
+                    if param_7 == "Установка ФБС блоков и ЦМ контейнера":
+                        break
+                except Exception as erroroerrer:
+                    print(erroroerrer)
             
             file_names = []
             for i in range(1,count):
                 file_names.append(TEMPLATES_FOLDER_PATH+f"Акт скрытых работ/file{i}.docx")
-            merge_docx_files(file_names, f"{OUTPUT_FOLDER_PATH}{tmpl['FILE_NAME']} {data['object_name']} {current_date}.docx")
+            merge_docx_files(file_names, f"{OUTPUT_FOLDER_PATH}{tmpl['FILE_NAME']} {data['obj_name']}.docx")
             
             file_names = []
             for i in range(1,30):
@@ -227,17 +279,19 @@ def data_assignments():
         else:
             replace_words_in_docx(data, tmpl['TEMPLATE'], tmpl['FILE_NAME'], OUTPUT_FOLDER_PATH)
 
+def send_report(text=None, process=None, responsible=None):
+    requests.post(f"https://script.google.com/macros/s/AKfycbzDwjE6Pu1a7otho2EHwbI-4yNoEmLijTfwWfI3toWpDpJ6rc-O1pKljV6XMLJmQIyJ/exec?time={datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}&process={process}&responsible={responsible}&text={text}")
+
+
 if __name__ == "__main__":
-    preparatory_operations()
-    data_assignments()
-    import reporter
-    x = reporter.send_report( 
-        process="Заполнение журнала", responsible="отдел Меруерт", text=obj_nameanius
-    )
-    print(x.text)
-    alert("Конец процесса")
+    try:
+        preparatory_operations()
+        data_assignments()
 
-
+        send_report(text="Автозаполнение журналов(ИД) для Кар-тел", process="Автозаполнения журналов(ИД)", responsible=os.getlogin())
+        alert("Конец процесса")
+    except:
+        alert(f"Произошла ошибка: {traceback.format_exc()}")
 
 
 
